@@ -4,6 +4,7 @@ The goal of this project is to impliment each of these papers,
 
 ## GAN'S
 
+- [Time-series Generative Adversarial Networks](https://proceedings.neurips.cc/paper/2019/file/c9efe5f26cd17ba6216bbe2a7d26d490-Paper.pdf)
 - [Multivariate Time Series Synthesis Using Generative Adversarial Networks](https://dl.acm.org/doi/abs/10.1145/3427921.3450257)
 - [E2GAN: End-to-End Generative Adversarial Network or Multivariate Time Series Imputation ](https://paperswithcode.com/paper/e2gan-end-to-end-generative-adversarial)
 
