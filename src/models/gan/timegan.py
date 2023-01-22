@@ -94,9 +94,14 @@ class MLP:
 class TimeGan:
 
     def __init__(self,
+
         latent_dim:int = 64, 
+        input_dim:int = 5,
+        projection_dim:int = 256,
+        
         nabla:float = 0.5, 
-        lambd:float = 0.5
+        lambd:float = 0.5,
+        static_features:list= None
         ) -> None:
         """
         TimeGan constructor 
@@ -113,14 +118,43 @@ class TimeGan:
         @param
         """
 
+        # TODO weiner process - (some kind of brownian motion)
+
+        #intialize internal paramters
         self.latent_dim = latent_dim
+        self.input_dim = input_dim
+        self.projection_dim = projection_dim
         self.nabla = nabla
         self.lambd = lambd
+        self.static_features = static_features # none if data set only has temporal features, list of column headers to remove from dataframe
 
-        self.static_encoder = None
-        self.temportal_encoder = None
-        self.static_decoder = None
-        self.temporal_decoder = None
+        #REAL DATA FUNCTIONS --------------------------------------
+
+        if static_features is not None:
+            #TODO - requires dataset with static featrues
+            self.static_encoder = None
+            self.static_decoder = None
+
+        self.temportal_encoder = RNN(
+            input_dims=self.input_dim,
+            hidden_dims=self.latent_dim
+        )
+
+        #TODO This also needs to have a projection back to the input feature space 
+        self.temporal_decoder = RNN(
+            input_dims=self.latent_dim,
+            hidden_dims=self.latent_dim
+        )
+
+        #GENERATOR FUNCTIONs ----------------------------------
+
+        if static_features is not None:
+            #TODO - requires dataser with static features
+            self.static_genertor = None
+            self.static_discriminator = None
+
+        self.temporal_encoder = RNN()
+        self.temportal_discriminator = RNN()
 
 
         # for the autoencodings 
@@ -137,6 +171,43 @@ class TimeGan:
 
 
     def train_model(self) -> None:
+        """
+        Method to execute the training process
+        """
+
+        # Full Pass ---------------------------------
+
+
+        # real data -> real latent space
+
+        # noise -> gen latent space
+
+        # real latents -> reconstruction -> reconstruction loss
+
+        # (real latents, gen latents) -> classicifaction -> dicriminator loss
+
+
+
+        # Half Pass ---------------------------------
+
+        # real data -> real latent
+
+        # real data -> gen latents
+
+        # (real latents, gen latents) -> MSE loss
+
+
 
         return
 
+
+
+
+if __name__ == "__main__":
+
+    print('TESTING TIMEGAN MODEL :')
+
+    model = TimeGan(
+        latent_dim=64,
+        projection_dim=256
+    )
