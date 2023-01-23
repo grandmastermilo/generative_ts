@@ -57,7 +57,7 @@ class RNNGenerator(torch.nn.Module):
             z_t = torch.randn((self.batch_size,1,self.input_dims))
 
             #initial hidden state
-            h_n = torch.zeros((self.batch_size,1*self.num_layers,self.hidden_dims))
+            h_n = torch.zeros((1*self.num_layers,self.batch_size,self.hidden_dims))
 
             outputs=[]
 
@@ -354,13 +354,13 @@ class TimeGan:
 
 if __name__ == "__main__":
 
-    # print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
+    print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
     
-    # input_dims = 5
+    input_dims = 5
     
-    # rnn_gen = RNNGenerator(batch_size=2, input_dims=5, seq_len=3)
+    rnn_gen = RNNGenerator(batch_size=3, input_dims=5, seq_len=3)
 
-    # rnn_gen.forward()
+    rnn_gen.forward()
 
     # print('TESTING RNN GENERATOR -- PREDICTIVE')
     
@@ -374,17 +374,17 @@ if __name__ == "__main__":
 
     # rnn_gen.forward(inputs)
 
-    print('TESTING RNN DISCRIMINATOR ')
+    # print('TESTING RNN DISCRIMINATOR ')
     
-    input_dims = 5
-    batch_size = 2
-    seq_len = 3
+    # input_dims = 5
+    # batch_size = 2
+    # seq_len = 3
 
-    inputs = torch.randn((batch_size*2, seq_len, input_dims))
+    # inputs = torch.randn((batch_size*2, seq_len, input_dims))
     
-    rnn_disc = RNNDicriminator(batch_size=batch_size, input_dims=input_dims, seq_len=seq_len)
+    # rnn_disc = RNNDicriminator(batch_size=batch_size, input_dims=input_dims, seq_len=seq_len)
 
-    rnn_disc.forward(inputs)
+    # rnn_disc.forward(inputs)
 
 
 
