@@ -1,6 +1,83 @@
 import torch
 
 
+class RNNGenerator(torch.nn.Module):
+
+    def __init__(self,
+        batch_size:int,
+        input_dims:int,
+        seq_len: int,
+        num_layers:int = 2,
+        activation:str = 'tanh',
+        use_bidirectional:bool = False,
+        dropout:float = 0.1,) -> None:
+        """
+        RNNGenerator constructor
+
+        - autoregressive rnn
+        - conditioned on 
+        """
+        super(RNNGenerator, self).__init__()
+
+        self.batch_size = batch_size
+        self.seq_len = seq_len
+        self.input_dims = input_dims
+        self.hidden_dims = input_dims
+        self.num_layers = num_layers
+        self.activation = activation
+        self.use_bidirectional = use_bidirectional
+        self.dropout = dropout
+
+        self.rnn = torch.nn.RNN(
+            input_size = input_dims,
+            hidden_size = input_dims,
+            num_layers = num_layers,
+            nonlinearity = activation,
+            dropout = dropout,
+            bidirectional= use_bidirectional,
+            batch_first = True
+        )
+
+        return 
+
+    def forward(self, x:torch.Tensor=None) -> torch.Tensor:
+        """
+        Forward pass of the RNN generator
+
+        - eecuted autogresively h_t = g_x(h_{0:t-1}, z_t)
+        - conditioned on weiner process at each time step 
+
+        - we must also use this generator for pass the real data for HALF PASS 
+        """
+        if x is None:
+            #execute autoregressive generation
+            
+            #initial weiner conditional
+            #TODO this should be a weiner process
+            z_t = torch.randn((self.batch_size,1,self.input_dims))
+
+            #initial hidden state
+            h_n = torch.zeros((self.batch_size,1*self.num_layers,self.hidden_dims))
+
+            outputs=[]
+
+            #autoregresively create outputs
+            for i in range(self.seq_len):
+                out, h_n = self.rnn(input=z_t, hx=h_n)
+                outputs.append(out)
+
+            #concatonate autorgressive outputs to get sequences
+            gen_encodings = torch.cat(outputs, dim=1 )
+   
+            return gen_encodings
+        else:
+            #execture the real data half pass
+            pass
+
+        return x
+
+
+
 class RNN(torch.nn.Module):
 
     def __init__(self,
@@ -135,6 +212,9 @@ class TimeGan:
             self.static_encoder = None
             self.static_decoder = None
 
+            self.static_genertor = None
+            self.static_discriminator = None
+
         self.temportal_encoder = RNN(
             input_dims=self.input_dim,
             hidden_dims=self.latent_dim
@@ -148,14 +228,10 @@ class TimeGan:
 
         #GENERATOR FUNCTIONs ----------------------------------
 
-        if static_features is not None:
-            #TODO - requires dataser with static features
-            self.static_genertor = None
-            self.static_discriminator = None
-
-        self.temporal_encoder = RNN()
-        self.temportal_discriminator = RNN()
-
+        self.temporal_generator = RNN(input_dims=self.latent_dim,
+            hidden_dims=self.latent_dim)
+        self.temportal_discriminator = RNN(input_dims=self.latent_dim,
+            hidden_dims=self.latent_dim)
 
         # for the autoencodings 
         self.static_reconstruction_loss = None
@@ -205,9 +281,18 @@ class TimeGan:
 
 if __name__ == "__main__":
 
-    print('TESTING TIMEGAN MODEL :')
+    print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
+    
+    input_dims = 5
+    
+    rnn_gen = RNNGenerator(batch_size=2, input_dims=5, seq_len=3)
 
-    model = TimeGan(
-        latent_dim=64,
-        projection_dim=256
-    )
+    rnn_gen.forward()
+
+
+    # print('TESTING TIMEGAN MODEL :')
+
+    # model = TimeGan(
+    #     latent_dim=64,
+    #     projection_dim=256
+    # )
