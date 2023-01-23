@@ -81,6 +81,76 @@ class RNNGenerator(torch.nn.Module):
             return preds
 
 
+
+class RNNDicriminator(torch.nn.Module):
+
+    def __init__(self,
+        batch_size:int,
+        input_dims:int,
+        seq_len: int,
+        num_layers:int = 3,
+        activation:str = 'tanh',
+        use_bidirectional:bool = True,
+        dropout:float = 0.1,) -> None:
+        """
+        RNNGenerator constructor
+
+        - apply a bidirection rnn over the sequences of latents (generated, real)
+        """
+        super(RNNDicriminator, self).__init__()
+
+        self.batch_size = batch_size*2 # real and generated
+        self.seq_len = seq_len
+        self.input_dims = input_dims
+        self.hidden_dims = input_dims
+        self.num_layers = num_layers
+        self.activation = activation
+        self.use_bidirectional = use_bidirectional
+        self.dropout = dropout
+
+        self.rnn = torch.nn.RNN(
+            input_size = input_dims,
+            hidden_size = input_dims,
+            num_layers = num_layers,
+            nonlinearity = activation,
+            dropout = dropout,
+            bidirectional= use_bidirectional,
+            batch_first = True
+        )
+
+        self.l1 = torch.nn.Linear(self.hidden_dims*2, self.hidden_dims)
+        self.l2 = torch.nn.Linear(self.hidden_dims, 1)
+        
+        self.tanh = torch.nn.Tanh()
+        self.sig = torch.nn.Sigmoid()
+
+        return
+        
+    def forward(self, latents_seq:torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for the rnn dicriminator
+
+        """
+        # h_T.size -> [2*num_layers, batch_size, hidden_out_dims ]
+        out, h_T = self.rnn(latents_seq) 
+     
+        # reshape so retreive h_out for last layers
+        h_T = torch.reshape(h_T, (2, self.num_layers, self.batch_size, self.hidden_dims))
+
+        # retreive h_t for last layers -> [2, batch_size, hidden_dims ]
+        h_T = h_T[:,-1,:]
+
+        #concatonate the h_t for each direction
+        h_T = torch.cat((h_T[0], h_T[1]), dim=1)
+       
+        # parse the hidden states through linear layers
+        x = self.tanh(self.l1(h_T))
+        x = self.sig(self.l2(x))
+
+        return x
+
+
+
 class RNN(torch.nn.Module):
 
     def __init__(self,
@@ -292,17 +362,31 @@ if __name__ == "__main__":
 
     # rnn_gen.forward()
 
-    print('TESTING RNN GENERATOR -- PREDICTIVE')
+    # print('TESTING RNN GENERATOR -- PREDICTIVE')
+    
+    # input_dims = 5
+    # batch_size = 2
+    # seq_len = 3
+
+    # inputs = torch.randn((batch_size, seq_len, input_dims))
+    
+    # rnn_gen = RNNGenerator(batch_size=batch_size, input_dims=input_dims, seq_len=seq_len)
+
+    # rnn_gen.forward(inputs)
+
+    print('TESTING RNN DISCRIMINATOR ')
     
     input_dims = 5
     batch_size = 2
     seq_len = 3
 
-    inputs = torch.randn((batch_size, seq_len, input_dims))
+    inputs = torch.randn((batch_size*2, seq_len, input_dims))
     
-    rnn_gen = RNNGenerator(batch_size=batch_size, input_dims=input_dims, seq_len=seq_len)
+    rnn_disc = RNNDicriminator(batch_size=batch_size, input_dims=input_dims, seq_len=seq_len)
 
-    rnn_gen.forward(inputs)
+    rnn_disc.forward(inputs)
+
+
 
 
     # print('TESTING TIMEGAN MODEL :')
