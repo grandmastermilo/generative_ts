@@ -70,12 +70,15 @@ class RNNGenerator(torch.nn.Module):
             gen_encodings = torch.cat(outputs, dim=1 )
    
             return gen_encodings
+
+
         else:
             #execture the real data half pass
-            pass
 
-        return x
+            #pass the real inputs through the generator to get generation predicitions
+            preds, h_T = self.rnn(x)
 
+            return preds
 
 
 class RNN(torch.nn.Module):
@@ -281,13 +284,25 @@ class TimeGan:
 
 if __name__ == "__main__":
 
-    print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
+    # print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
+    
+    # input_dims = 5
+    
+    # rnn_gen = RNNGenerator(batch_size=2, input_dims=5, seq_len=3)
+
+    # rnn_gen.forward()
+
+    print('TESTING RNN GENERATOR -- PREDICTIVE')
     
     input_dims = 5
-    
-    rnn_gen = RNNGenerator(batch_size=2, input_dims=5, seq_len=3)
+    batch_size = 2
+    seq_len = 3
 
-    rnn_gen.forward()
+    inputs = torch.randn((batch_size, seq_len, input_dims))
+    
+    rnn_gen = RNNGenerator(batch_size=batch_size, input_dims=input_dims, seq_len=seq_len)
+
+    rnn_gen.forward(inputs)
 
 
     # print('TESTING TIMEGAN MODEL :')
