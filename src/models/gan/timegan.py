@@ -6,6 +6,7 @@ class RNNGenerator(torch.nn.Module):
     def __init__(self,
         batch_size:int,
         input_dims:int,
+        hidden_dims:int,
         seq_len: int,
         num_layers:int = 2,
         activation:str = 'tanh',
@@ -22,7 +23,7 @@ class RNNGenerator(torch.nn.Module):
         self.batch_size = batch_size
         self.seq_len = seq_len
         self.input_dims = input_dims
-        self.hidden_dims = input_dims
+        self.hidden_dims = hidden_dims
         self.num_layers = num_layers
         self.activation = activation
         self.use_bidirectional = use_bidirectional
@@ -30,7 +31,7 @@ class RNNGenerator(torch.nn.Module):
 
         self.rnn = torch.nn.RNN(
             input_size = input_dims,
-            hidden_size = input_dims,
+            hidden_size = hidden_dims,
             num_layers = num_layers,
             nonlinearity = activation,
             dropout = dropout,
@@ -54,23 +55,12 @@ class RNNGenerator(torch.nn.Module):
             
             #initial weiner conditional
             #TODO this should be a weiner process
-            z_t = torch.randn((self.batch_size,1,self.input_dims))
+            z_t = torch.randn((self.batch_size,self.seq_len,self.input_dims))
 
-            #initial hidden state
-            h_n = torch.zeros((1*self.num_layers,self.batch_size,self.hidden_dims))
-
-            outputs=[]
-
-            #autoregresively create outputs
-            for i in range(self.seq_len):
-                out, h_n = self.rnn(input=z_t, hx=h_n)
-                outputs.append(out)
-
-            #concatonate autorgressive outputs to get sequences
-            gen_encodings = torch.cat(outputs, dim=1 )
-   
+            #parse weiner process sequence through rnn
+            gen_encodings, h_n = self.rnn(input=z_t, hx=h_n)
+              
             return gen_encodings
-
 
         else:
             #execture the real data half pass
@@ -88,10 +78,11 @@ class RNNDicriminator(torch.nn.Module):
         batch_size:int,
         input_dims:int,
         seq_len: int,
-        num_layers:int = 3,
+        num_layers:int = 2,
         activation:str = 'tanh',
         use_bidirectional:bool = True,
-        dropout:float = 0.1,) -> None:
+        dropout:float = 0.1,
+        discriminate_context=True) -> None:
         """
         RNNGenerator constructor
 
@@ -107,6 +98,7 @@ class RNNDicriminator(torch.nn.Module):
         self.activation = activation
         self.use_bidirectional = use_bidirectional
         self.dropout = dropout
+        self.discriminate_context = discriminate_context
 
         self.rnn = torch.nn.RNN(
             input_size = input_dims,
@@ -130,124 +122,115 @@ class RNNDicriminator(torch.nn.Module):
         """
         Forward pass for the rnn dicriminator
 
+        - use the lr and rl rnn passes final hidden state as vector to classify
+
+        - note:
+            - we could choose an alternative agregation method for h_T_LR/RL
         """
-        # h_T.size -> [2*num_layers, batch_size, hidden_out_dims ]
-        out, h_T = self.rnn(latents_seq) 
-     
-        # reshape so retreive h_out for last layers
-        h_T = torch.reshape(h_T, (2, self.num_layers, self.batch_size, self.hidden_dims))
 
-        # retreive h_t for last layers -> [2, batch_size, hidden_dims ]
-        h_T = h_T[:,-1,:]
+        if self.discriminate_context:
+            # h_T.size -> [2*num_layers, batch_size, hidden_out_dims ]
+            out, h_T = self.rnn(latents_seq) 
+        
+            # reshape so retreive h_out for last layers
+            h_T = torch.reshape(h_T, (2, self.num_layers, self.batch_size, self.hidden_dims))
 
-        #concatonate the h_t for each direction
-        h_T = torch.cat((h_T[0], h_T[1]), dim=1)
-       
-        # parse the hidden states through linear layers
-        x = self.tanh(self.l1(h_T))
-        x = self.sig(self.l2(x))
+            # retreive h_t for last layers -> [2, batch_size, hidden_dims ]
+            h_T = h_T[:,-1,:]
+
+            #concatonate the h_t for each direction
+            h_T = torch.cat((h_T[0], h_T[1]), dim=1)
+        
+            # parse the hidden states through linear layers
+            x = self.tanh(self.l1(h_T))
+            x = self.sig(self.l2(x))
+
+        else:
+            raise Exception("Method not yet implimented")
 
         return x
 
 
 
-class RNN(torch.nn.Module):
+class RNNAutoencoder(torch.nn.Module):
 
-    def __init__(self,
+    def __init__(self, 
+        batch_size:int,
         input_dims:int,
-        hidden_dims:int = 128,
+        hidden_dim:int,
+        seq_len: int,
         num_layers:int = 2,
         activation:str = 'tanh',
         use_bidirectional:bool = False,
-        dropout:float = 0.1,
-    ) -> None:
+        dropout:float = 0.1):
         """
-        RNN constructor
+        RNNAutoencoder constructor
 
-        - creates temporal embeddings constioned on static features embedings
-        - used for the generator 
-        - also used for the discriminator
-            - bidirectional -> linear output layer
-
+        -
         """
+        super(RNNDicriminator, self).__init__()
+
+        self.batch_size = batch_size
+        self.seq_len = seq_len
         self.input_dims = input_dims
-        self.hidden_dims = hidden_dims
+        self.hidden_dims = hidden_dim
         self.num_layers = num_layers
         self.activation = activation
         self.use_bidirectional = use_bidirectional
         self.dropout = dropout
 
-        self.rnn = torch.nn.RNN(
+        self.encoder = torch.nn.RNN(
             input_size = input_dims,
-            hidden_size = hidden_dims,
+            hidden_size = hidden_dim,
             num_layers = num_layers,
             nonlinearity = activation,
             dropout = dropout,
-            bidirectional= use_bidirectional
+            bidirectional= use_bidirectional,
+            batch_first = True
         )
-        return 
+        self.decoder = torch.nn.RNN(
+            input_size = hidden_dim,
+            hidden_size = hidden_dim,
+            num_layers = num_layers,
+            nonlinearity = activation,
+            dropout = dropout,
+            bidirectional= use_bidirectional,
+            batch_first = True
+        )
 
-    def forward(self, x):
-        return self.rnn(x)
-
-
-class MLP:
-
-    def __init__(self,
-        input_dims:int,
-        output_dims: int,
-        num_layers:int = 3,
-        activation:str = 'tanh',
-        dropout:float = 0.1,
-    ) -> None:
-        """
-        MLPencoder Constructor
+        self.l1 = torch.nn.Linear(self.hidden_dims, self.input_dims)
         
-        - creates static feature embeddings
-        - used for decoding both temporal and static embeddings 
 
+
+    def encode(self,x):
         """
-        self.input_dims = input_dims
-        self.output_dims = output_dims
-        self.num_layers = num_layers
-        self.activation = activation
-        self.dropout = dropout
-        
-        layers = []
+        Method for encoding sequence inputs to latent space
+        """
+        #pass the real data through the encoder
+        encoding, h_T = self.encoder(x)
+        return encoding
 
-        for i in range(self.num_layers):
+    def decode(self, x):
+        """
+        Mathod for decoding from latent space to input space
+        """
+        #pass the real latents through the decoder
+        latent_decoding, h_T = self.decoder(x)
 
-            if i == 0:
-                layers.append(torch.nn.Linear(self.input_dims, self.output_dims))
-            else:
-                layers.append(torch.nn.Linear(self.output_dims, self.output_dims))
+        #pass the decoded latents through the projector to return the input dims 
+        decoding = self.l1(latent_decoding)
 
-            if self.activation == 'tanh':
-                layers.append(torch.nn.Tanh())
-            else:
-                raise Exception('Not implimented')
-
-            if dropout is not None:
-                layers.append(torch.nn.Dropout(self.dropout))
-
-        self.net = torch.nn.Sequential(*layers)
-
-        return 
-
-
-    def forward(self, x):
-        return self.net(x)
-
+        return decoding
 
 
 
 class TimeGan:
 
     def __init__(self,
-
+        batch_size:int = 500,
         latent_dim:int = 64, 
         input_dim:int = 5,
-        projection_dim:int = 256,
+        seq_len:int = 10,
         
         nabla:float = 0.5, 
         lambd:float = 0.5,
@@ -268,12 +251,11 @@ class TimeGan:
         @param
         """
 
-        # TODO weiner process - (some kind of brownian motion)
-
         #intialize internal paramters
+        self.batch_size = batch_size
         self.latent_dim = latent_dim
         self.input_dim = input_dim
-        self.projection_dim = projection_dim
+        self.seq_len = seq_len
         self.nabla = nabla
         self.lambd = lambd
         self.static_features = static_features # none if data set only has temporal features, list of column headers to remove from dataframe
@@ -288,79 +270,91 @@ class TimeGan:
             self.static_genertor = None
             self.static_discriminator = None
 
-        self.temportal_encoder = RNN(
+        self.rnn_ae = RNNAutoencoder(
+            batch_size=self.batch_size,
             input_dims=self.input_dim,
-            hidden_dims=self.latent_dim
-        )
-
-        #TODO This also needs to have a projection back to the input feature space 
-        self.temporal_decoder = RNN(
-            input_dims=self.latent_dim,
-            hidden_dims=self.latent_dim
-        )
+            hidden_dim=self.latent_dim,
+            seq_len=self.seq_len,
+            )
 
         #GENERATOR FUNCTIONs ----------------------------------
 
-        self.temporal_generator = RNN(input_dims=self.latent_dim,
-            hidden_dims=self.latent_dim)
-        self.temportal_discriminator = RNN(input_dims=self.latent_dim,
-            hidden_dims=self.latent_dim)
+        self.temporal_generator = RNNGenerator(
+            batch_size=self.batch_size,
+            input_dims=self.input_dim,
+            hidden_dims=self.latent_dim,
+            seq_len=self.seq_len
+        )
+
+        self.temportal_discriminator = RNNDicriminator(
+            batch_size=self.batch_size,
+            input_dims=self.input_dim,
+            hidden_dims=self.latent_dim,
+            seq_len=self.seq_len
+        )
 
         # for the autoencodings 
-        self.static_reconstruction_loss = None
-        self.temporal_reconstruction_loss = None
+        #TODO check these work as expected for sequences
+        self.reconstruction_loss = torch.nn.L1Loss()
 
         # discriminator loss
-        self.static_disc_loss = None
-        self.temportal_disc_loss = None
+        self.gan_loss = torch.nn.BCELoss()
 
         # generator loss
-        self.temporal_gen_loss = None
+        self.generator_loss = torch.nn.L1Loss()
+
         return 
 
-
-    def train_model(self) -> None:
+    
+    def forward(self, x:torch.Tensor, is_full_pass:bool) -> (torch.Tensor, torch.Tensor):
         """
-        Method to execute the training process
+        Method for the forward pass for the TimeGan
+
+        - note discriminator receive [real latents, generate latents]
+
+        @param x: real sequence data
+        @param is_full_pass: denotes which pass we are doing
+            - full pass: AE loss, GAN loss
+            - half pass: MSE loss 
         """
 
-        # Full Pass ---------------------------------
+        if is_full_pass:
+            # encode latents and generate latents
+            real_latents = self.rnn_ae.encode(x)
+            gen_latents = self.temporal_generator.forward()
 
+            # concatonate tensors to pass to discriminator
+            disc_inputs = torch.cat([real_latents, gen_latents], dim=0)
+            
+            # get discriminator classification
+            disc_classification = self.temportal_discriminator(disc_inputs)
 
-        # real data -> real latent space
+            # get reconstruction from real latents
+            real_reconstruction = self.rnn_ae.decode(real_latents)
 
-        # noise -> gen latent space
+            return disc_classification, real_reconstruction
 
-        # real latents -> reconstruction -> reconstruction loss
+        else:
+            # get real and generated latents from real data
+            real_latents = self.rnn_ae.encode(x)
+            gen_latents = self.temporal_generator.forward(x)
+            
+            
+            return real_latents, gen_latents
 
-        # (real latents, gen latents) -> classicifaction -> dicriminator loss
-
-
-
-        # Half Pass ---------------------------------
-
-        # real data -> real latent
-
-        # real data -> gen latents
-
-        # (real latents, gen latents) -> MSE loss
-
-
-
-        return
 
 
 
 
 if __name__ == "__main__":
 
-    print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
+    # print('TESTING RNN GENERATOR -- AUTOREGRESSIVE')
     
-    input_dims = 5
+    # input_dims = 5
     
-    rnn_gen = RNNGenerator(batch_size=3, input_dims=5, seq_len=3)
+    # rnn_gen = RNNGenerator(batch_size=3, input_dims=5, seq_len=3)
 
-    rnn_gen.forward()
+    # rnn_gen.forward()
 
     # print('TESTING RNN GENERATOR -- PREDICTIVE')
     
