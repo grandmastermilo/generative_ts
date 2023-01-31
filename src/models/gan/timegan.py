@@ -311,7 +311,7 @@ class TimeGan:
         Method for the forward pass for the TimeGan
 
         - note discriminator receive [real latents, generate latents]
-
+dataloading
         @param x: real sequence data
         @param is_full_pass: denotes which pass we are doing
             - full pass: AE loss, GAN loss
