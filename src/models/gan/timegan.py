@@ -422,7 +422,7 @@ class TimeGan:
 
             loss_u = self.unsupervised_loss(disc_classification, labels)
 
-            loss_s = self.supervised_loss(gen_latents, real_latents)
+            loss_s = self.supervised_loss(gen_latents, real_latents[:,1:,:]) #cant compute mse error on the first real embedding
 
             self.ae_optim.zero_grad()
             ae_loss = self.lambd*loss_s + loss_r
