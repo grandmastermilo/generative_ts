@@ -51,6 +51,8 @@ class RNNGenerator(torch.nn.Module):
         - conditioned on weiner process at each time step 
 
         - we must also use this generator for pass the real data for HALF PASS 
+
+        @param x: embedding recovered from the rnn_encoder from real data
         """
         if x is None:
             #execute autoregressive generation
@@ -65,10 +67,26 @@ class RNNGenerator(torch.nn.Module):
             return gen_encodings
 
         else:
+            #TODO THIS IS WRONG SHOULD BE SETTING THE REAL EMBEDDINGS AS THE HIDDEN STATES
             #execture the real data half pass
+            z_t = torch.randn((self.batch_size,self.seq_len,self.input_dims))
+            z_t = z_t.reshape(self.batch_size*self.seq_len, -1) #[batch_size*seq_len, embedding dims]
+
+
+            #note: we cannot set the hidden state for each pass, therefore we must do some reshaping
+            #note: using uni-directional rnn our intial input error could be very large
+
+            #x size -> [batch_size, sequence len, embedding dims]
+            x = x.reshape(self.batch_size*self.seq_len, -1) #[batch_size*seq_len, embedding dims]
 
             #pass the real inputs through the generator to get generation predicitions
-            preds, h_T = self.rnn(x)
+            preds, h_T = self.rnn(z_t, x) #[batch_size*seq_len, embedding dims]
+
+            #reshape the pred back into input shape
+            preds = preds.reshape(self.batch_size, self.seq_len, -1)
+
+            #we cannot get an error from the last output of the sequence
+            preds = preds[:,:-1,:] 
 
             return preds
 
