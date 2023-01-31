@@ -1,4 +1,6 @@
 import torch
+from torch.optim import Adam
+from torch.utils.data import DataLoader, Dataset
 
 
 class RNNGenerator(torch.nn.Module):
@@ -227,6 +229,7 @@ class RNNAutoencoder(torch.nn.Module):
 class TimeGan:
 
     def __init__(self,
+        learning_rate:float = 1e-3,
         batch_size:int = 500,
         latent_dim:int = 64, 
         input_dim:int = 5,
@@ -252,6 +255,7 @@ class TimeGan:
         """
 
         #intialize internal paramters
+        self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.latent_dim = latent_dim
         self.input_dim = input_dim
@@ -260,6 +264,7 @@ class TimeGan:
         self.lambd = lambd
         self.static_features = static_features # none if data set only has temporal features, list of column headers to remove from dataframe
 
+        
         #REAL DATA FUNCTIONS --------------------------------------
 
         if static_features is not None:
@@ -298,10 +303,17 @@ class TimeGan:
         self.reconstruction_loss = torch.nn.L1Loss()
 
         # discriminator loss
-        self.gan_loss = torch.nn.BCELoss()
+        self.unsupervised_loss = torch.nn.BCELoss()
 
         # generator loss
-        self.generator_loss = torch.nn.L1Loss()
+        self.supervised_loss = torch.nn.L1Loss()
+
+        self.all_params = list(self.rnn_ae.parameters()) + \
+            list(self.temporal_generator.parameters()) + \
+                list(self.temportal_discriminator.parameters())
+    
+        #intialize constant parameter
+        self.optim = Adam(params=self.all_params, lr=self.learning_rate)
 
         return 
 
@@ -311,7 +323,7 @@ class TimeGan:
         Method for the forward pass for the TimeGan
 
         - note discriminator receive [real latents, generate latents]
-dataloading
+
         @param x: real sequence data
         @param is_full_pass: denotes which pass we are doing
             - full pass: AE loss, GAN loss
@@ -341,6 +353,51 @@ dataloading
             
             
             return real_latents, gen_latents
+
+
+    
+    def training_step(self, dataset:Dataset) -> None:
+        """
+        Method to impliment training step
+
+        @param dataset: a Dataset object, is passed to create a dataloader
+        """
+        self.train()
+
+        dataloader = DataLoader(
+            dataset=dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=0,
+            collate_fn=None,
+            pin_memory=False,
+        )
+
+        
+        for batch_idx, samples in enumerate(dataloader):
+            
+
+            # step 1 --- full pass
+
+            disc_classification, real_reconstruction = self.forward(samples, is_full_pass=True)
+
+            loss_r = self.reconstruction_loss(real_reconstruction, samples)
+
+            labels_1 = torch.ones(self.batch_size)
+            labesl_0 = torch.zeros(self.batch_size)
+            labels = torch.cat((labels_1,labesl_0))
+
+            loss_u = self.unsupervised_loss(disc_classification, labels)
+
+
+            # step 2 --- half pass
+
+            real_latents, gen_latents = self.forward(samples, is_full_pass=False)
+            
+            loss_s = self.supervised_loss(gen_latents, real_latents)
+
+
+        return 
 
 
 
