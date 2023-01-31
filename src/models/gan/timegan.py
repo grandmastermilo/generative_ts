@@ -331,7 +331,9 @@ class TimeGan:
                 list(self.temportal_discriminator.parameters())
     
         #intialize constant parameter
-        self.optim = Adam(params=self.all_params, lr=self.learning_rate)
+        self.ae_optim = Adam(params=self.all_params, lr=self.learning_rate)
+        self.disc_optim = Adam(params=self.all_params, lr=self.learning_rate, maximize=True)
+        self.gen_optim = Adam(params=self.all_params, lr=self.learning_rate)
 
         return 
 
@@ -347,30 +349,46 @@ class TimeGan:
             - full pass: AE loss, GAN loss
             - half pass: MSE loss 
         """
+        # encode latents and generate latents
+        real_latents = self.rnn_ae.encode(x)
+        gen_latents = self.temporal_generator.forward()
 
-        if is_full_pass:
-            # encode latents and generate latents
-            real_latents = self.rnn_ae.encode(x)
-            gen_latents = self.temporal_generator.forward()
+        # concatonate tensors to pass to discriminator
+        disc_inputs = torch.cat([real_latents, gen_latents], dim=0)
+        
+        # get discriminator classification
+        disc_classification = self.temportal_discriminator(disc_inputs)
 
-            # concatonate tensors to pass to discriminator
-            disc_inputs = torch.cat([real_latents, gen_latents], dim=0)
+        # get reconstruction from real latents
+        real_reconstruction = self.rnn_ae.decode(real_latents)
+
+        gen_latents = self.temporal_generator.forward(real_latents)
+
+        return real_latents, gen_latents, disc_classification, real_reconstruction
+
+        # if is_full_pass:
+        #     # encode latents and generate latents
+        #     real_latents = self.rnn_ae.encode(x)
+        #     gen_latents = self.temporal_generator.forward()
+
+        #     # concatonate tensors to pass to discriminator
+        #     disc_inputs = torch.cat([real_latents, gen_latents], dim=0)
             
-            # get discriminator classification
-            disc_classification = self.temportal_discriminator(disc_inputs)
+        #     # get discriminator classification
+        #     disc_classification = self.temportal_discriminator(disc_inputs)
 
-            # get reconstruction from real latents
-            real_reconstruction = self.rnn_ae.decode(real_latents)
+        #     # get reconstruction from real latents
+        #     real_reconstruction = self.rnn_ae.decode(real_latents)
 
-            return disc_classification, real_reconstruction
+        #     return disc_classification, real_reconstruction
 
-        else:
-            # get real and generated latents from real data
-            real_latents = self.rnn_ae.encode(x)
-            gen_latents = self.temporal_generator.forward(x)
+        # else:
+        #     # get real and generated latents from real data
+        #     real_latents = self.rnn_ae.encode(x)
+        #     gen_latents = self.temporal_generator.forward(x)
             
             
-            return real_latents, gen_latents
+        #     return real_latents, gen_latents
 
 
     
@@ -393,11 +411,8 @@ class TimeGan:
 
         
         for batch_idx, samples in enumerate(dataloader):
-            
 
-            # step 1 --- full pass
-
-            disc_classification, real_reconstruction = self.forward(samples, is_full_pass=True)
+            real_latents, gen_latents, disc_classification, real_reconstruction = self.forward(samples, is_full_pass=True)
 
             loss_r = self.reconstruction_loss(real_reconstruction, samples)
 
@@ -407,12 +422,21 @@ class TimeGan:
 
             loss_u = self.unsupervised_loss(disc_classification, labels)
 
-
-            # step 2 --- half pass
-
-            real_latents, gen_latents = self.forward(samples, is_full_pass=False)
-            
             loss_s = self.supervised_loss(gen_latents, real_latents)
+
+            self.ae_optim.zero_grad()
+            ae_loss = self.lambd*loss_s + loss_r
+            ae_loss.backward(retain_graph=True)
+            self.ae_optim.step()
+    
+            self.disc_optim.zero_grad()
+            loss_u.backward(retain_graph=True)
+            self.disc_optim.step()
+
+            self.gen_optim.zero_grad()
+            gen_loss = self.nabla*loss_s + loss_u
+            gen_loss.backward()
+            self.gen_optim.step()
 
 
         return 
